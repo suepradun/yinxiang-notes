@@ -127,7 +127,11 @@ def make_attachments_section(hash_to_file):
     if not hash_to_file:
         return ''
     lines = ['\n---\n', '## 附件\n']
+    seen_filenames = set()
     for fname in hash_to_file.values():
+        if fname in seen_filenames:
+            continue
+        seen_filenames.add(fname)
         ext = os.path.splitext(fname)[1].lower()
         if ext in IMAGE_EXTS:
             lines.append(f'![{fname}](_attachments/{fname})')
