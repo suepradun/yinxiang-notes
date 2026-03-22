@@ -336,8 +336,9 @@ def scan_local_vault():
                 mtime_ms = int(os.path.getmtime(fp) * 1000)
                 guid = None
                 if content.startswith('---'):
-                    end = content.find('---', 3)
-                    if end > 0:
+                    match = re.search(r'\n---\s*\n', content[3:])
+                    if match:
+                        end = 3 + match.end()
                         for line in content[3:end].splitlines():
                             if line.startswith('source_guid:'):
                                 guid = line.split(':', 1)[1].strip()
@@ -436,6 +437,24 @@ def sync_to_obsidian():
 
         print(f"  [{nb_idx+1}/{total_notebooks}] 📓 {nb.name}: {len(notes_meta)} 条")
 
+        dup_guids = set()
+        if len(notes_meta) > 1:
+            title_to_meta = {}
+            for m in notes_meta:
+                t = getattr(m, 'title', '') or ''
+                u = getattr(m, 'updated', 0) or 0
+                if t in title_to_meta:
+                    existing_u = getattr(title_to_meta[t], 'updated', 0) or 0
+                    if u > existing_u:
+                        dup_guids.add(title_to_meta[t].guid)
+                        title_to_meta[t] = m
+                    else:
+                        dup_guids.add(m.guid)
+                else:
+                    title_to_meta[t] = m
+            if dup_guids:
+                print(f"    🔗 去重：发现 {len(dup_guids)} 条重复标题，将跳过旧版本")
+
         for meta_idx in range(progress.get('note_idx', 0), len(notes_meta)):
             meta = notes_meta[meta_idx]
             progress['note_idx'] = meta_idx
@@ -448,6 +467,9 @@ def sync_to_obsidian():
                 return
 
             ev_updated = getattr(meta, 'updated', 0) or 0
+            if meta.guid in dup_guids:
+                skipped += 1
+                continue
             if meta.guid in local_guid_map:
                 if ev_updated <= local_guid_map[meta.guid]['local_updated_ms']:
                     skipped += 1
